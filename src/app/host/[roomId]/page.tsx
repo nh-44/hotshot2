@@ -88,6 +88,20 @@ export default function HostPage() {
       >
         Publish Room
       </button>
+      <div className="mt-6 bg-slate-800 p-4 rounded border border-slate-700">
+        <p className="font-bold mb-2 text-orange-500">Share this link with players:</p>
+        <input
+          readOnly
+          value={typeof window !== "undefined" ? `${window.location.origin}/play/${roomId}` : ""}
+          className="w-full p-2 rounded bg-slate-700 text-sm border border-slate-600 focus:outline-none focus:border-orange-500 cursor-pointer"
+          onClick={(e) => {
+            e.currentTarget.select();
+            navigator.clipboard.writeText(e.currentTarget.value);
+            alert("Link copied to clipboard!");
+          }}
+        />
+        <p className="text-xs text-slate-400 mt-2">Click the box to copy the URL</p>
+      </div>
     </main>
   );
 }
