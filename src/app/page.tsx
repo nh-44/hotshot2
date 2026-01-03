@@ -6,40 +6,80 @@ import { supabase } from "@/lib/supabase";
 
 export default function HomePage() {
   const router = useRouter();
+
   const [roomName, setRoomName] = useState("");
   const [passkey, setPasskey] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const createRoom = async () => {
-    if (!roomName || passkey.length !== 10) {
-      alert("Room name + 10-char passkey required");
+    const cleanRoom = roomName.trim();
+    const cleanPasskey = passkey.trim();
+
+    if (!cleanRoom || cleanPasskey.length !== 10) {
+      alert("Room name and a 10-character passkey are required");
       return;
     }
 
-    const { data } = await supabase
+    setLoading(true);
+
+    const { data, error } = await supabase
       .from("rooms")
-      .insert({ room_name: roomName, passkey })
+      .insert({
+        room_name: cleanRoom,
+        passkey: cleanPasskey,
+        status: "draft",
+      })
       .select()
       .single();
+
+    setLoading(false);
+
+    if (error) {
+      if (error.code === "23505") {
+        alert("Room name already exists. Choose a different name.");
+        return;
+      }
+
+      console.error(error);
+      alert("Failed to create room");
+      return;
+    }
 
     router.push(`/host/${data.id}`);
   };
 
   const adminLogin = async () => {
-    const { data } = await supabase
+    const cleanPasskey = passkey.trim();
+
+    if (cleanPasskey.length !== 10) {
+      alert("Enter a valid 10-character passkey");
+      return;
+    }
+
+    setLoading(true);
+
+    const { data, error } = await supabase
       .from("rooms")
       .select("id")
-      .eq("passkey", passkey)
-      .single();
+      .eq("passkey", cleanPasskey)
+      .limit(1);
 
-    if (!data) return alert("Invalid passkey");
+    setLoading(false);
 
-    router.push(`/admin?room=${data.id}&passkey=${passkey}`);
+    if (error || !data || data.length === 0) {
+      alert("Invalid passkey");
+      return;
+    }
+
+    router.push(`/admin?room=${data[0].id}&passkey=${cleanPasskey}`);
   };
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-slate-900 text-white p-6">
-      <div className="max-w-md w-full bg-slate-800 p-6 rounded space-y-4">
-        <h1 className="text-2xl font-bold">🔥 HotShot</h1>
+      <div className="max-w-md w-full bg-slate-800 p-6 rounded space-y-4 border border-slate-700">
+        <h1 className="text-2xl font-bold text-orange-500 text-center">
+          🔥 HotShot
+        </h1>
 
         <input
           className="w-full p-3 rounded bg-slate-700"
@@ -50,21 +90,23 @@ export default function HomePage() {
 
         <input
           className="w-full p-3 rounded bg-slate-700"
-          placeholder="10-char passkey"
+          placeholder="10-character passkey"
           value={passkey}
           onChange={e => setPasskey(e.target.value)}
         />
 
         <button
           onClick={createRoom}
-          className="w-full bg-orange-600 py-3 rounded font-bold"
+          disabled={loading}
+          className="w-full bg-orange-600 py-3 rounded font-bold disabled:opacity-50"
         >
           Create Room
         </button>
 
         <button
           onClick={adminLogin}
-          className="w-full bg-slate-600 py-2 rounded"
+          disabled={loading}
+          className="w-full bg-slate-600 py-2 rounded disabled:opacity-50"
         >
           Admin Login
         </button>

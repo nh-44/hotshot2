@@ -32,7 +32,7 @@ export default function AdminClient() {
         .from("rooms")
         .select("id")
         .eq("id", roomId)
-        .eq("passkey", passkey)
+        .eq("passkey", passkey.trim())
         .single();
 
       if (!room) {
