@@ -76,11 +76,15 @@ export default function HostPage() {
         </button>
       </div>
 
-      {questions.map(q => (
-        <div key={q.id} className="bg-slate-800 p-3 mb-2 rounded">
-          {q.order_index}. {q.text}
-        </div>
-      ))}
+      {Array.isArray(questions) &&
+      questions
+      .filter(Boolean)
+      .map(q => (
+      <div key={q.id}>
+        {q.order_index}. {q.text}
+      </div>
+    ))}
+
 
       <button
         onClick={publish}

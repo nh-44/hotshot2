@@ -6,83 +6,117 @@ import { supabase } from "@/lib/supabase";
 import { getSessionToken } from "@/lib/session";
 import AddOption from "@/components/AddOption";
 
-
 export default function PlayPage() {
-  const { roomId } = useParams();
+  const { roomId } = useParams<{ roomId: string }>();
+
   const [name, setName] = useState("");
   const [joined, setJoined] = useState(false);
+
   const [questions, setQuestions] = useState<any[]>([]);
   const [options, setOptions] = useState<any[]>([]);
+
   const [index, setIndex] = useState(0);
   const [voted, setVoted] = useState(false);
 
+  /* ---------------- LOAD QUESTIONS ---------------- */
+
   useEffect(() => {
+    if (!roomId) return;
+
     supabase
       .from("questions")
       .select("*")
       .eq("room_id", roomId)
       .order("order_index")
-      .then(({ data }) => setQuestions(data || []));
+      .then(({ data }) => {
+        setQuestions(Array.isArray(data) ? data : []);
+      });
   }, [roomId]);
 
-  const question = questions[index];
+  /* ---------------- SAFE CURRENT QUESTION ---------------- */
+
+  const question =
+    Array.isArray(questions) && index >= 0 && index < questions.length
+      ? questions[index]
+      : null;
+
+  /* ---------------- LOAD OPTIONS ---------------- */
 
   useEffect(() => {
-    if (!question) return;
+    if (!question) {
+      setOptions([]);
+      return;
+    }
 
     supabase
       .from("options")
       .select("*")
       .eq("question_id", question.id)
-      .then(({ data }) => setOptions(data || []));
+      .then(({ data }) => {
+        setOptions(Array.isArray(data) ? data : []);
+      });
   }, [question]);
 
+  /* ---------------- JOIN ROOM ---------------- */
+
   const join = async () => {
+    if (!name.trim()) return;
+
     await supabase.from("players").insert({
       room_id: roomId,
       name,
-      session_token: getSessionToken(roomId as string),
+      session_token: getSessionToken(roomId),
     });
+
     setJoined(true);
   };
 
+  /* ---------------- VOTE ---------------- */
+
   const vote = async (optionId: string) => {
+    if (!question || voted) return;
+
     await supabase.from("votes").insert({
       room_id: roomId,
       question_id: question.id,
       option_id: optionId,
     });
+
     setVoted(true);
   };
+
+  /* ---------------- ADD OPTION + VOTE ---------------- */
+
   const addOptionAndVote = async (text: string) => {
-  if (!text.trim() || voted) return;
+    if (!question || voted || !text.trim()) return;
 
-  // 1. Create option
-  const { data: option } = await supabase
-    .from("options")
-    .insert({
-      question_id: question.id,
-      text,
-      created_by: name,
-    })
-    .select()
-    .single();
+    const { data: option } = await supabase
+      .from("options")
+      .insert({
+        question_id: question.id,
+        text,
+        created_by: name,
+      })
+      .select()
+      .single();
 
-  // 2. Record vote
+    if (!option) return;
+
     await supabase.from("votes").insert({
-    room_id: roomId,
-    question_id: question.id,
-    option_id: option.id,
-  });
+      room_id: roomId,
+      question_id: question.id,
+      option_id: option.id,
+    });
 
-  setVoted(true);
-};
+    setVoted(true);
+  };
 
+  /* ---------------- JOIN SCREEN ---------------- */
 
   if (!joined) {
     return (
-      <main className="flex items-center justify-center min-h-screen bg-slate-900 text-white">
-        <div className="bg-slate-800 p-6 rounded w-80">
+      <main className="flex items-center justify-center min-h-screen bg-slate-900 text-white p-6">
+        <div className="bg-slate-800 p-6 rounded w-full max-w-sm">
           <input
             className="w-full p-3 mb-4 bg-slate-700 rounded"
             placeholder="Your name"
@@ -91,7 +125,7 @@ export default function PlayPage() {
           />
           <button
             onClick={join}
-            className="w-full bg-orange-600 py-3 rounded"
+            className="w-full bg-orange-600 py-3 rounded font-bold"
           >
             Start
           </button>
@@ -100,45 +134,62 @@ export default function PlayPage() {
     );
   }
 
+  /* ---------------- FINISH SCREEN ---------------- */
+
   if (!question) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white text-2xl font-bold">
         🎉 You finished!
       </div>
     );
   }
 
+  /* ---------------- QUESTION SCREEN ---------------- */
+
   return (
     <main className="p-6 bg-slate-900 text-white min-h-screen">
-      <h2 className="text-xl font-bold mb-4">{question.text}</h2>
+      <div className="max-w-xl mx-auto">
+        <h2 className="text-xl font-bold mb-4">
+          {index + 1}. {question.text}
+        </h2>
 
-      {options.map(o => (
-        <div
-          key={o.id}
-          onClick={() => vote(o.id)}
-          className="bg-slate-800 p-3 rounded mb-2 cursor-pointer"
+        {Array.isArray(options) &&
+          options
+            .filter(Boolean)
+            .map(o => (
+              <div
+                key={o.id}
+                onClick={() => vote(o.id)}
+                className={`bg-slate-800 p-3 rounded mb-2 ${
+                  voted
+                    ? "opacity-60"
+                    : "cursor-pointer hover:bg-slate-700"
+                }`}
+              >
+                {o.text}
+              </div>
+            ))}
+
+        {!voted && options.length < (question.max_options || 15) && (
+          <div className="mt-4">
+            <p className="text-sm text-slate-400 mb-2 italic text-center">
+              Or add your own:
+            </p>
+            <AddOption onAdd={addOptionAndVote} />
+          </div>
+        )}
+
+        <button
+          disabled={!voted}
+          onClick={() => {
+            setIndex(i => i + 1);
+            setVoted(false);
+          }}
+          className="mt-6 bg-green-600 py-2 px-6 rounded font-bold disabled:opacity-50"
         >
-          {o.text}
-        </div>
-      ))}
-
-      {!voted && options.length < (question.max_options || 15) && (
-        <div className="mt-4">
-          <p className="text-sm text-slate-400 mb-2 italic text-center">Or add your own:</p>
-          <AddOption onAdd={addOptionAndVote} />
-        </div>
-      )}
-
-      <button
-        disabled={!voted}
-        onClick={() => {
-          setIndex(i => i + 1);
-          setVoted(false);
-        }}
-        className="mt-6 bg-green-600 py-2 px-6 rounded disabled:opacity-50"
-      >
-        Next
-      </button>
+          Next
+        </button>
+      </div>
     </main>
   );
 }
