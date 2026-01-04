@@ -1,71 +1,62 @@
 # 🔥 HotShot
 
-HotShot is a lightweight **audience interaction & live polling platform**.  
-An organizer creates a room, adds questions with preset options, publishes it, and participants vote or add their own responses. Results are visualized live and exportable as CSV.
+**HotShot** is a lightweight, high-performance **audience interaction and live polling platform**. It empowers organizers to crowdsource ideas in real-time by allowing participants to not only vote on existing choices but also contribute their own responses.
 
-Built using **Next.js (App Router)** and **Supabase**.
+---
+
+## 🚀 Quick Links
+- **Tech Stack**: Next.js 15+, Supabase, Tailwind CSS, Recharts
+- **Key Logic**: Crowdsourced option creation with session-based identity
+- **Deployment**: Optimized for Vercel
 
 ---
 
 ## ✨ Features
 
-### 👤 Organizer (Host)
-- Create a room with a **unique room name** and **10-character passkey**
-- Add multiple questions
-- Set **maximum options per question**
-- Add **preset options** for each question
-- Publish the room when ready
-- Share responder link with **one-click copy**
-- View results in an admin dashboard
-- Download results as **CSV**
+### 🎙️ For the Organizer (Host)
+* **Secure Room Setup**: Create rooms with a **unique room name** and a private **10-character passkey**.
+* **Dynamic Question Builder**: Add multiple questions with custom **maximum option limits** (5, 10, or 15).
+* **Crowdsourced Logic**: Pre-fill preset options or allow the first responder to define the initial choice.
+* **One-Click Sharing**: Share `/play/[roomId]` responder links instantly with a one-click copy tool.
+* **Data Portability**: Download results as a **CSV** containing player names, questions, and selected options.
 
-### 🧑 Participants (Responders)
-- Join via shared link
-- Enter name (no login required)
-- Choose preset options or add their own
-- One vote per question per participant
-- Session-based identity to prevent duplicate voting
+### 🎮 For the Participants (Responders)
+* **Zero-Friction Entry**: No login or OAuth required; join simply by entering a name.
+* **Evolutionary Polling**: Choose from existing options or add a completely new response for others to vote on.
+* **Identity Protection**: Session tokens ensure one vote per question per participant to prevent duplicate voting.
 
 ### 📊 Admin Dashboard
-- Passkey-protected access
-- Pie-chart visualization per question
-- CSV export containing:
-  - Player name
-  - Question text
-  - Selected option
+* **Passkey Protection**: Secured access to sensitive result data using the room's unique passkey.
+* **Visual Analytics**: Gamified result visualization with **Pie charts** and **Bar charts**.
+* **Probability Tables**: View options broken down by vote percentages in an animated table.
 
 ---
 
 ## 🛠 Tech Stack
 
-- **Frontend**: Next.js 16 (App Router, Client Components)
-- **Backend / Database**: Supabase (PostgreSQL)
-- **Charts**: Recharts
-- **CSV Export**: PapaParse
-- **Styling**: Tailwind CSS
-- **Auth (Lightweight)**: Session token (no OAuth)
+| Layer | Technology |
+| :--- | :--- |
+| **Frontend** | [Next.js 15+](https://nextjs.org/) (App Router) |
+| **Styling** | [Tailwind CSS](https://tailwindcss.com/) |
+| **Database** | [Supabase](https://supabase.com/) (PostgreSQL) |
+| **Charts** | [Recharts](https://recharts.org/) |
+| **CSV Engine** | [PapaParse](https://www.papaparse.com/) |
+| **Auth** | Session-based Identity (UUID) |
 
 ---
 
 ## 📁 Project Structure
 
+```text
 src/
 ├── app/
-│ ├── page.tsx # Home (Create Room / Admin Login)
-│ ├── host/[roomId]/page.tsx # Host dashboard
-│ ├── play/[roomId]/page.tsx # Player voting page
-│ └── admin/
-│ ├── page.tsx
-│ └── AdminClient.tsx # Results + charts + CSV
-│
-├── components/
-│ └── AddOption.tsx
-│
-├── lib/
-│ ├── supabase.ts
-│ └── session.ts
-
-
+│   ├── page.tsx               # Home (Create Room / Admin Login)
+│   ├── host/[roomId]/         # Host Dashboard (Question Management)
+│   ├── play/[roomId]/         # Participant Voting Interface
+│   └── admin/                 # Results, Charts, and CSV Export
+├── components/                # Reusable UI (AddOption.tsx, PieChart.tsx)
+├── lib/                       # Supabase client, Session, and CSV helpers
+└── types/                     # TypeScript Interfaces
 ---
 
 ## 🗄 Database Schema (Core Tables)
@@ -135,9 +126,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 
 4️⃣ Run locally
 npm run dev
+```
 --------------------
 
-🧪 Typical Flow
+### Typical Flow
 
 Organizer creates a room
 Adds questions and preset options
