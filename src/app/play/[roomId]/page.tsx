@@ -69,6 +69,8 @@ export default function PlayPage() {
       .from("options")
       .select("*")
       .eq("question_id", question.id)
+      // ✅ PRESET OPTIONS FIRST
+      .order("is_preset", { ascending: false })
       .then(({ data }) => {
         setOptions(Array.isArray(data) ? data : []);
       });
@@ -77,100 +79,100 @@ export default function PlayPage() {
   /* ================= JOIN ROOM ================= */
 
   const join = async () => {
-  if (!name.trim()) return;
+    if (!name.trim()) return;
 
-  const sessionToken = getSessionToken(roomId);
+    const sessionToken = getSessionToken(roomId);
 
-  // 1️⃣ Insert player
-  const { error: insertError } = await supabase
-    .from("players")
-    .insert({
-      room_id: roomId,
-      name: name.trim(),
-      session_token: sessionToken,
-    });
+    const { error: insertError } = await supabase
+      .from("players")
+      .insert({
+        room_id: roomId,
+        name: name.trim(),
+        session_token: sessionToken,
+      });
 
-  // Ignore duplicate player (same session)
-  if (insertError && insertError.code !== "23505") {
-    console.error("PLAYER INSERT ERROR:", insertError);
-    alert("Failed to join room");
-    return;
-  }
+    // Ignore duplicate join
+    if (insertError && insertError.code !== "23505") {
+      console.error("PLAYER INSERT ERROR:", insertError);
+      alert("Failed to join room");
+      return;
+    }
 
-  // 2️⃣ Fetch player id (REQUIRED)
-  const { data: player, error: fetchError } = await supabase
-    .from("players")
-    .select("id")
-    .eq("room_id", roomId)
-    .eq("session_token", sessionToken)
-    .single();
+    const { data: player, error: fetchError } = await supabase
+      .from("players")
+      .select("id")
+      .eq("room_id", roomId)
+      .eq("session_token", sessionToken)
+      .single();
 
-  if (fetchError || !player) {
-    console.error("PLAYER FETCH ERROR:", fetchError);
-    alert("Failed to load player");
-    return;
-  }
+    if (fetchError || !player) {
+      console.error("PLAYER FETCH ERROR:", fetchError);
+      alert("Failed to load player");
+      return;
+    }
 
-  setPlayerId(player.id);
-  setJoined(true);
-};
-
+    setPlayerId(player.id);
+    setJoined(true);
+  };
 
   /* ================= VOTE ================= */
 
   const vote = async (optionId: string) => {
-  if (!question || voted || !playerId) return;
+    if (!question || !playerId || voted) return;
 
-  const { error } = await supabase.from("votes").insert({
-    room_id: roomId,
-    question_id: question.id,
-    option_id: optionId,
-    player_id: playerId,
-  });
+    // ✅ HARD GUARD AGAINST DOUBLE CLICK
+    setVoted(true);
 
-  if (error) {
-    console.error("VOTE INSERT ERROR:", error);
-    alert("Vote failed. Please refresh.");
-    return;
-  }
+    const { error } = await supabase.from("votes").insert({
+      room_id: roomId,
+      question_id: question.id,
+      option_id: optionId,
+      player_id: playerId,
+    });
 
-  setVoted(true);
-};
+    if (error) {
+      console.error("VOTE INSERT ERROR:", error);
+      setVoted(false);
+    }
+  };
 
   /* ================= ADD OPTION + VOTE ================= */
 
   const addOptionAndVote = async (text: string) => {
-  if (!question || voted || !text.trim() || !playerId) return;
+    if (!question || !playerId || voted || !text.trim()) return;
 
-  const { data: option, error: optError } = await supabase
-    .from("options")
-    .insert({
+    // ✅ HARD GUARD AGAINST DOUBLE CLICK
+    setVoted(true);
+
+    const { data: option, error: optError } = await supabase
+      .from("options")
+      .insert({
+        question_id: question.id,
+        text: text.trim(),
+        created_by: playerId,
+        is_preset: false,
+      })
+      .select()
+      .single();
+
+    if (optError || !option) {
+      console.error("OPTION INSERT ERROR:", optError);
+      setVoted(false);
+      return;
+    }
+
+    const { error: voteError } = await supabase.from("votes").insert({
+      room_id: roomId,
       question_id: question.id,
-      text: text.trim(),
-      created_by: playerId,
-    })
-    .select()
-    .single();
+      option_id: option.id,
+      player_id: playerId,
+    });
 
-  if (optError || !option) {
-    console.error("OPTION INSERT ERROR:", optError);
-    return;
-  }
-
-  const { error: voteError } = await supabase.from("votes").insert({
-    room_id: roomId,
-    question_id: question.id,
-    option_id: option.id,
-    player_id: playerId,
-  });
-
-  if (voteError) {
-    console.error("VOTE INSERT ERROR:", voteError);
-    return;
-  }
-
-  setVoted(true);
-};
+    if (voteError) {
+      console.error("VOTE INSERT ERROR:", voteError);
+      setVoted(false);
+    }
+  };
 
   /* ================= RENDER ================= */
 
