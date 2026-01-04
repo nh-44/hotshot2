@@ -9,16 +9,35 @@ import AddOption from "@/components/AddOption";
 export default function PlayPage() {
   const { roomId } = useParams<{ roomId: string }>();
 
-  const [name, setName] = useState("");
-  const [joined, setJoined] = useState(false);
-
+  const [room, setRoom] = useState<any>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [options, setOptions] = useState<any[]>([]);
 
+  const [name, setName] = useState("");
+  const [joined, setJoined] = useState(false);
+  const [playerId, setPlayerId] = useState<string | null>(null);
+
   const [index, setIndex] = useState(0);
   const [voted, setVoted] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  /* ---------------- LOAD QUESTIONS ---------------- */
+  /* ================= LOAD ROOM ================= */
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    supabase
+      .from("rooms")
+      .select("status")
+      .eq("id", roomId)
+      .single()
+      .then(({ data }) => {
+        setRoom(data);
+        setLoading(false);
+      });
+  }, [roomId]);
+
+  /* ================= LOAD QUESTIONS ================= */
 
   useEffect(() => {
     if (!roomId) return;
@@ -33,14 +52,12 @@ export default function PlayPage() {
       });
   }, [roomId]);
 
-  /* ---------------- SAFE CURRENT QUESTION ---------------- */
+  /* ================= CURRENT QUESTION ================= */
 
   const question =
-    Array.isArray(questions) && index >= 0 && index < questions.length
-      ? questions[index]
-      : null;
+    index >= 0 && index < questions.length ? questions[index] : null;
 
-  /* ---------------- LOAD OPTIONS ---------------- */
+  /* ================= LOAD OPTIONS ================= */
 
   useEffect(() => {
     if (!question) {
@@ -57,65 +74,125 @@ export default function PlayPage() {
       });
   }, [question]);
 
-  /* ---------------- JOIN ROOM ---------------- */
+  /* ================= JOIN ROOM ================= */
 
   const join = async () => {
-    if (!name.trim()) return;
+  if (!name.trim()) return;
 
-    await supabase.from("players").insert({
+  const sessionToken = getSessionToken(roomId);
+
+  // 1️⃣ Insert player
+  const { error: insertError } = await supabase
+    .from("players")
+    .insert({
       room_id: roomId,
-      name,
-      session_token: getSessionToken(roomId),
+      name: name.trim(),
+      session_token: sessionToken,
     });
 
-    setJoined(true);
-  };
+  // Ignore duplicate player (same session)
+  if (insertError && insertError.code !== "23505") {
+    console.error("PLAYER INSERT ERROR:", insertError);
+    alert("Failed to join room");
+    return;
+  }
 
-  /* ---------------- VOTE ---------------- */
+  // 2️⃣ Fetch player id (REQUIRED)
+  const { data: player, error: fetchError } = await supabase
+    .from("players")
+    .select("id")
+    .eq("room_id", roomId)
+    .eq("session_token", sessionToken)
+    .single();
+
+  if (fetchError || !player) {
+    console.error("PLAYER FETCH ERROR:", fetchError);
+    alert("Failed to load player");
+    return;
+  }
+
+  setPlayerId(player.id);
+  setJoined(true);
+};
+
+
+  /* ================= VOTE ================= */
 
   const vote = async (optionId: string) => {
-    if (!question || voted) return;
+  if (!question || voted || !playerId) return;
 
-    await supabase.from("votes").insert({
-      room_id: roomId,
-      question_id: question.id,
-      option_id: optionId,
-    });
+  const { error } = await supabase.from("votes").insert({
+    room_id: roomId,
+    question_id: question.id,
+    option_id: optionId,
+    player_id: playerId,
+  });
 
-    setVoted(true);
-  };
+  if (error) {
+    console.error("VOTE INSERT ERROR:", error);
+    alert("Vote failed. Please refresh.");
+    return;
+  }
 
-  /* ---------------- ADD OPTION + VOTE ---------------- */
+  setVoted(true);
+};
+
+  /* ================= ADD OPTION + VOTE ================= */
 
   const addOptionAndVote = async (text: string) => {
-    if (!question || voted || !text.trim()) return;
+  if (!question || voted || !text.trim() || !playerId) return;
 
-    const { data: option } = await supabase
-      .from("options")
-      .insert({
-        question_id: question.id,
-        text,
-        created_by: name,
-      })
-      .select()
-      .single();
-
-    if (!option) return;
-
-    await supabase.from("votes").insert({
-      room_id: roomId,
+  const { data: option, error: optError } = await supabase
+    .from("options")
+    .insert({
       question_id: question.id,
-      option_id: option.id,
-    });
+      text: text.trim(),
+      created_by: playerId,
+    })
+    .select()
+    .single();
 
-    setVoted(true);
-  };
+  if (optError || !option) {
+    console.error("OPTION INSERT ERROR:", optError);
+    return;
+  }
 
-  /* ---------------- JOIN SCREEN ---------------- */
+  const { error: voteError } = await supabase.from("votes").insert({
+    room_id: roomId,
+    question_id: question.id,
+    option_id: option.id,
+    player_id: playerId,
+  });
+
+  if (voteError) {
+    console.error("VOTE INSERT ERROR:", voteError);
+    return;
+  }
+
+  setVoted(true);
+};
+
+  /* ================= RENDER ================= */
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!room || room.status !== "live") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+        ⏳ This room is not live yet
+      </div>
+    );
+  }
 
   if (!joined) {
     return (
-      <main className="flex items-center justify-center min-h-screen bg-slate-900 text-white p-6">
+      <main className="min-h-screen flex items-center justify-center bg-slate-900 text-white p-6">
         <div className="bg-slate-800 p-6 rounded w-full max-w-sm">
           <input
             className="w-full p-3 mb-4 bg-slate-700 rounded"
@@ -134,8 +211,6 @@ export default function PlayPage() {
     );
   }
 
-  /* ---------------- FINISH SCREEN ---------------- */
-
   if (!question) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white text-2xl font-bold">
@@ -144,39 +219,27 @@ export default function PlayPage() {
     );
   }
 
-  /* ---------------- QUESTION SCREEN ---------------- */
-
   return (
-    <main className="p-6 bg-slate-900 text-white min-h-screen">
+    <main className="min-h-screen bg-slate-900 text-white p-6">
       <div className="max-w-xl mx-auto">
         <h2 className="text-xl font-bold mb-4">
           {index + 1}. {question.text}
         </h2>
 
-        {Array.isArray(options) &&
-          options
-            .filter(Boolean)
-            .map(o => (
-              <div
-                key={o.id}
-                onClick={() => vote(o.id)}
-                className={`bg-slate-800 p-3 rounded mb-2 ${
-                  voted
-                    ? "opacity-60"
-                    : "cursor-pointer hover:bg-slate-700"
-                }`}
-              >
-                {o.text}
-              </div>
-            ))}
+        {options.map(o => (
+          <div
+            key={o.id}
+            onClick={() => vote(o.id)}
+            className={`bg-slate-800 p-3 rounded mb-2 ${
+              voted ? "opacity-60" : "cursor-pointer hover:bg-slate-700"
+            }`}
+          >
+            {o.text}
+          </div>
+        ))}
 
         {!voted && options.length < (question.max_options || 15) && (
-          <div className="mt-4">
-            <p className="text-sm text-slate-400 mb-2 italic text-center">
-              Or add your own:
-            </p>
-            <AddOption onAdd={addOptionAndVote} />
-          </div>
+          <AddOption onAdd={addOptionAndVote} />
         )}
 
         <button
@@ -187,7 +250,7 @@ export default function PlayPage() {
           }}
           className="mt-6 bg-green-600 py-2 px-6 rounded font-bold disabled:opacity-50"
         >
-          Next
+          {index === questions.length - 1 ? "Finish" : "Next"}
         </button>
       </div>
     </main>

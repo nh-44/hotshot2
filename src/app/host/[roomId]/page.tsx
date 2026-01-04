@@ -7,11 +7,26 @@ import { supabase } from "@/lib/supabase";
 export default function HostPage() {
   const { roomId } = useParams<{ roomId: string }>();
 
+  const [room, setRoom] = useState<any>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [newQuestion, setNewQuestion] = useState("");
   const [limit, setLimit] = useState(10);
+  const [publishing, setPublishing] = useState(false);
 
-  /* ---------------- LOAD QUESTIONS ---------------- */
+  /* ================= LOAD ROOM ================= */
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    supabase
+      .from("rooms")
+      .select("*")
+      .eq("id", roomId)
+      .single()
+      .then(({ data }) => setRoom(data));
+  }, [roomId]);
+
+  /* ================= LOAD QUESTIONS ================= */
 
   useEffect(() => {
     if (!roomId) return;
@@ -21,133 +36,160 @@ export default function HostPage() {
       .select("*")
       .eq("room_id", roomId)
       .order("order_index")
-      .then(({ data }) => {
-        setQuestions(Array.isArray(data) ? data : []);
-      });
+      .then(({ data }) => setQuestions(data || []));
   }, [roomId]);
 
-  /* ---------------- ADD QUESTION ---------------- */
+  /* ================= ADD QUESTION ================= */
 
   const addQuestion = async () => {
     if (!newQuestion.trim()) return;
+
+    const orderIndex = questions.length + 1;
 
     const { data, error } = await supabase
       .from("questions")
       .insert({
         room_id: roomId,
         text: newQuestion.trim(),
-        order_index: questions.length + 1,
         max_options: limit,
+        order_index: orderIndex,
       })
       .select()
       .single();
 
-    if (error) {
-      console.error(error);
+    if (error || !data) {
       alert("Failed to add question");
       return;
     }
 
-    // 🔑 Update UI immediately
     setQuestions(prev => [...prev, data]);
     setNewQuestion("");
   };
 
-  /* ---------------- PUBLISH ROOM ---------------- */
+  /* ================= PUBLISH ROOM ================= */
 
-  const publish = async () => {
+  const publishRoom = async () => {
+    if (questions.length === 0) {
+      alert("Add at least one question before publishing");
+      return;
+    }
+
+    setPublishing(true);
+
     const { error } = await supabase
       .from("rooms")
       .update({ status: "live" })
       .eq("id", roomId);
+
+    setPublishing(false);
 
     if (error) {
       alert("Failed to publish room");
       return;
     }
 
-    alert("Room is live!");
+    setRoom((r: any) => ({ ...r, status: "live" }));
   };
 
-  /* ---------------- RENDER ---------------- */
+  /* ================= LOADING ================= */
+
+  if (!room) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+        Loading…
+      </div>
+    );
+  }
+
+  /* ================= UI ================= */
 
   return (
-    <main className="p-6 bg-slate-900 text-white min-h-screen">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-xl font-bold mb-4">Host Dashboard</h1>
+    <main className="min-h-screen bg-slate-900 text-white p-6">
+      <div className="max-w-xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold text-orange-500">
+          Host Dashboard
+        </h1>
 
         {/* ADD QUESTION */}
-        <div className="bg-slate-800 p-4 rounded mb-6">
-          <input
-            className="w-full p-3 bg-slate-700 rounded mb-3"
-            placeholder="Enter question"
-            value={newQuestion}
-            onChange={e => setNewQuestion(e.target.value)}
-          />
+        {room.status === "draft" && (
+          <div className="bg-slate-800 p-4 rounded space-y-3">
+            <input
+              className="w-full p-3 rounded bg-slate-700"
+              placeholder="Enter question"
+              value={newQuestion}
+              onChange={e => setNewQuestion(e.target.value)}
+            />
 
-          <select
-            className="w-full p-3 bg-slate-700 rounded mb-3"
-            value={limit}
-            onChange={e => setLimit(Number(e.target.value))}
-          >
-            <option value={5}>5 options</option>
-            <option value={10}>10 options</option>
-            <option value={15}>15 options</option>
-          </select>
+            <select
+              className="w-full p-3 rounded bg-slate-700"
+              value={limit}
+              onChange={e => setLimit(Number(e.target.value))}
+            >
+              <option value={5}>5 options</option>
+              <option value={10}>10 options</option>
+              <option value={15}>15 options</option>
+            </select>
 
-          <button
-            onClick={addQuestion}
-            className="w-full bg-orange-600 py-2 rounded font-bold"
-          >
-            Add Question
-          </button>
-        </div>
+            <button
+              onClick={addQuestion}
+              className="w-full bg-orange-600 py-2 rounded font-bold"
+            >
+              Add Question
+            </button>
+          </div>
+        )}
 
         {/* QUESTION LIST */}
-        {Array.isArray(questions) &&
-          questions
-            .filter(Boolean)
-            .map(q => (
-              <div
-                key={q.id}
-                className="bg-slate-800 p-3 rounded mb-2"
-              >
-                {q.order_index}. {q.text}
-              </div>
-            ))}
-
-        {/* PUBLISH */}
-        <button
-          onClick={publish}
-          className="mt-6 w-full bg-green-600 py-3 rounded font-bold"
-        >
-          Publish Room
-        </button>
-
-        {/* SHARE LINK */}
-        <div className="mt-6 bg-slate-800 p-4 rounded border border-slate-700">
-          <p className="font-bold mb-2 text-orange-500">
-            Share this link with players:
-          </p>
-
-          <input
-            readOnly
-            value={
-              typeof window !== "undefined"
-                ? `${window.location.origin}/play/${roomId}`
-                : ""
-            }
-            className="w-full p-2 rounded bg-slate-700 text-sm cursor-pointer"
-            onClick={e => {
-              e.currentTarget.select();
-              navigator.clipboard.writeText(e.currentTarget.value);
-            }}
-          />
-
-          <p className="text-xs text-slate-400 mt-2">
-            Click to copy the URL
-          </p>
+        <div className="space-y-2">
+          {questions.map(q => (
+            <div
+              key={q.id}
+              className="bg-slate-800 p-3 rounded text-sm"
+            >
+              {q.order_index}. {q.text}
+            </div>
+          ))}
         </div>
+
+        {/* PUBLISH / SHARE */}
+        {room.status === "draft" ? (
+          <button
+            onClick={publishRoom}
+            disabled={publishing}
+            className="w-full bg-green-600 py-3 rounded font-bold disabled:opacity-50"
+          >
+            Publish Room
+          </button>
+        ) : (
+          <div className="bg-slate-800 p-4 rounded border border-slate-700 space-y-2">
+            <p className="font-bold text-green-400">
+              ✅ Room is LIVE
+            </p>
+
+            <p className="text-sm text-slate-300">
+              Share this link with players:
+            </p>
+
+            <input
+              readOnly
+              value={
+                typeof window !== "undefined"
+                  ? `${window.location.origin}/play/${roomId}`
+                  : ""
+              }
+              className="w-full p-2 rounded bg-slate-700 text-sm border border-slate-600 cursor-pointer"
+              onClick={e => {
+                e.currentTarget.select();
+                navigator.clipboard.writeText(e.currentTarget.value);
+                alert("Link copied to clipboard!");
+              }}
+            />
+
+            <p className="text-xs text-slate-400">
+              Click the box to copy
+            </p>
+          </div>
+        )}
       </div>
     </main>
   );

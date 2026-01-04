@@ -12,41 +12,29 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
 
   const createRoom = async () => {
-    const cleanRoom = roomName.trim();
-    const cleanPasskey = passkey.trim();
+  if (!roomName || passkey.length !== 10) {
+    alert("Room name + 10-char passkey required");
+    return;
+  }
 
-    if (!cleanRoom || cleanPasskey.length !== 10) {
-      alert("Room name and a 10-character passkey are required");
-      return;
-    }
+  const { data, error } = await supabase
+    .from("rooms")
+    .insert({
+      room_name: roomName.trim(),
+      passkey: passkey.trim(),
+      status: "draft",
+    })
+    .select()
+    .single();
 
-    setLoading(true);
+  if (error || !data) {
+    alert("Failed to create room");
+    return;
+  }
 
-    const { data, error } = await supabase
-      .from("rooms")
-      .insert({
-        room_name: cleanRoom,
-        passkey: cleanPasskey,
-        status: "draft",
-      })
-      .select()
-      .single();
-
-    setLoading(false);
-
-    if (error) {
-      if (error.code === "23505") {
-        alert("Room name already exists. Choose a different name.");
-        return;
-      }
-
-      console.error(error);
-      alert("Failed to create room");
-      return;
-    }
-
-    router.push(`/host/${data.id}`);
-  };
+  // ✅ MUST GO TO HOST PAGE
+  router.push(`/host/${data.id}`);
+};
 
   const adminLogin = async () => {
     const cleanPasskey = passkey.trim();

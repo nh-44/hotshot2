@@ -28,6 +28,7 @@ export default function AdminClient() {
     if (!roomId || !passkey) return;
 
     const load = async () => {
+      // 1️⃣ Validate admin access
       const { data: room } = await supabase
         .from("rooms")
         .select("id")
@@ -40,24 +41,36 @@ export default function AdminClient() {
         return;
       }
 
+      // 2️⃣ Load questions
       const { data: qs } = await supabase
         .from("questions")
         .select("*")
         .eq("room_id", roomId)
         .order("order_index");
 
-      const { data: v } = await supabase
+      // 3️⃣ Load raw tables (NO JOINS)
+      const { data: votesRaw } = await supabase
         .from("votes")
-        .select(`
-          id,
-          question_id,
-          options(text),
-          players(name)
-        `)
+        .select("id, question_id, option_id, player_id")
         .eq("room_id", roomId);
 
+      const { data: optionsRaw } = await supabase
+        .from("options")
+        .select("id, text");
+
+      const { data: playersRaw } = await supabase
+        .from("players")
+        .select("id, name");
+
+      // 4️⃣ Manual join (RLS-safe)
+      const joinedVotes = (votesRaw || []).map(v => ({
+        ...v,
+        options: optionsRaw?.find(o => o.id === v.option_id),
+        players: playersRaw?.find(p => p.id === v.player_id),
+      }));
+
       setQuestions(qs || []);
-      setVotes(v || []);
+      setVotes(joinedVotes);
       setLoading(false);
     };
 
@@ -85,7 +98,7 @@ export default function AdminClient() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-        Loading…
+        Loading admin dashboard…
       </div>
     );
   }
@@ -112,40 +125,43 @@ export default function AdminClient() {
               dist[opt] = (dist[opt] || 0) + 1;
             });
 
-          const data = Object.entries(dist).map(([k, v]) => ({
-            name: k,
-            value: v,
+          const data = Object.entries(dist).map(([name, value]) => ({
+            name,
+            value,
           }));
 
           return (
-            <div
-              key={q.id}
-              className="bg-slate-800 p-6 rounded mb-10"
-            >
+            <div key={q.id} className="bg-slate-800 p-6 rounded mb-10">
               <h2 className="font-bold mb-4">
                 {qi + 1}. {q.text}
               </h2>
 
-              <div className="flex justify-center overflow-x-auto">
-                <PieChart width={350} height={300}>
-                  <Pie
-                    data={data}
-                    dataKey="value"
-                    nameKey="name"
-                    outerRadius={100}
-                    label
-                  >
-                    {data.map((_, i) => (
-                      <Cell
-                        key={i}
-                        fill={COLORS[i % COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </div>
+              {data.length === 0 ? (
+                <p className="text-slate-400 italic">
+                  No responses for this question
+                </p>
+              ) : (
+                <div className="flex justify-center overflow-x-auto">
+                  <PieChart width={350} height={300}>
+                    <Pie
+                      data={data}
+                      dataKey="value"
+                      nameKey="name"
+                      outerRadius={100}
+                      label
+                    >
+                      {data.map((_, i) => (
+                        <Cell
+                          key={i}
+                          fill={COLORS[i % COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </div>
+              )}
             </div>
           );
         })}
